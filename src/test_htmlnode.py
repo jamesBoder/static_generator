@@ -5,6 +5,7 @@ from htmlnode import LeafNode
 from htmlnode import ParentNode
 from textnode import TextType, TextNode
 from htmlnode import text_node_to_html_node
+from code_func import split_nodes_delimiter, extract_markdown_images, split_nodes_image, split_nodes_link, text_to_textnodes
 
 
 class TestHtmlNode(unittest.TestCase):
@@ -129,6 +130,65 @@ class TestHtmlNode(unittest.TestCase):
         self.assertEqual(html_node.value, None)
         self.assertEqual(html_node.props, {"src": "https://www.boot.dev/image.jpg"})    
 
+    def test_split_nodes_delimiter(self):
+        node1 = TextNode("This is a text node", TextType.TEXT)
+        node2 = TextNode("This is a bold node", TextType.BOLD)
+        node3 = TextNode("This is an italic node", TextType.ITALIC)
+        nodes = [node1, node2, node3]
+        delimiter = TextNode("This is a bold node", TextType.BOLD)
+        text_type = TextType.BOLD
+        new_nodes = split_nodes_delimiter(nodes, delimiter, text_type)
+        self.assertEqual(new_nodes, [node1, node2, node3])
+
+    def test_split_nodes_delimiter_with_delimiter(self):
+        node1 = TextNode("This is a text node", TextType.TEXT)
+        node2 = TextNode("This is a bold node", TextType.BOLD)
+        node3 = TextNode("This is an italic node", TextType.ITALIC)
+        nodes = [node1, node2, node3]
+        delimiter = TextNode("This is a bold node", TextType.BOLD)
+        text_type = TextType.BOLD
+        new_nodes = split_nodes_delimiter(nodes, delimiter, text_type)
+        self.assertEqual(new_nodes, [node1, node2, node3])
+
+    def test_split_nodes_delimiter_with_delimiter_in_text(self):
+        node1 = TextNode("This is a text node", TextType.TEXT)
+        node2 = TextNode("This is a bold node", TextType.BOLD)
+        node3 = TextNode("This is an italic node", TextType.ITALIC)
+        nodes = [node1, node2, node3]
+        delimiter = TextNode("bold", TextType.TEXT)
+        text_type = TextType.BOLD
+        new_nodes = split_nodes_delimiter(nodes, delimiter, text_type)
+        self.assertEqual(new_nodes, [node1, TextNode("This is a bold node", TextType.BOLD), node3])
+
+    def test_extract_markdown_images(self):
+        matches = extract_markdown_images(
+            "This is text with an ![image](https://i.imgur.com/zjjcJKZ.png)"
+    )
+        self.assertListEqual([("image", "https://i.imgur.com/zjjcJKZ.png")], matches)
+
+    def test_split_nodes_image(self):
+        node1 = TextNode("This is a text node", TextType.TEXT)
+        node2 = TextNode("This is an image node", TextType.IMAGE, "https://www.boot.dev/image.jpg")
+        node3 = TextNode("This is a text node", TextType.TEXT)
+        nodes = [node1, node2, node3]
+        new_nodes = split_nodes_image(nodes)
+        self.assertEqual(new_nodes, [node1, node2, node3])
+
+    def test_split_nodes_image_with_image(self):
+        node1 = TextNode("This is a text node", TextType.TEXT)  
+        node2 = TextNode("This is an image node", TextType.IMAGE, "https://www.boot.dev/image.jpg")
+        node3 = TextNode("This is a text node", TextType.TEXT)
+        nodes = [node1, node2, node3]
+        new_nodes = split_nodes_image(nodes)
+        self.assertEqual(new_nodes, [node1, node2, node3])
+
+    def test_text_to_textnodes(self):
+        text = "This is a text node"
+        text_nodes = text_to_textnodes(text)
+        self.assertEqual(text_nodes, [TextNode("This is a text node", TextType.TEXT)])
+
+    
+        
 
             
     

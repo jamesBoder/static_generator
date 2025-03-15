@@ -1,5 +1,5 @@
 import re
-from textnode import TextNode, TextType
+from textnode import TextNode, TextType, BlockType
 
 def split_nodes_delimiter(old_nodes, delimiter, text_type):
     new_nodes = []
@@ -95,3 +95,56 @@ def text_to_textnodes(text):
     nodes = split_nodes_image(nodes)
     nodes = split_nodes_link(nodes)
     return nodes
+
+def markdown_to_blocks(markdown):
+    # Split markdown into blocks
+    blocks = markdown.split("\n\n")
+    # Remove whitespace from blocks
+    blocks = [block.strip() for block in blocks]
+    # Remove empty blocks
+    blocks = [block for block in blocks if block]
+    # Convert blocks to TextNodes
+    return blocks
+
+def block_to_block_type(block):
+    # Determine the type of block
+    count = 0 # Count the number of hashes
+    while count < len(block) and block[count] == "#":
+        count += 1
+    if count > 6 or (count > 0 and (len(block) <= count or block[count] != " ")):
+        return BlockType.PARAGRAPH
+    if 1 <= count <= 6 and len(block) > count and block[count] == " ":
+        return BlockType.HEADING
+    elif block[:3] == "```" and block[-3:] == "```":
+        return BlockType.CODE
+    # Check every line in a quote block starts with ">"
+    elif all(line.startswith(">") for line in block.split("\n")):
+        return BlockType.QUOTE
+    # Check every line in an unordered list block starts with "- "
+    elif all(re.match(r"^- ", line) for line in block.split("\n")):
+        return BlockType.UNORDERED_LIST
+    # Check every line in an ordered list block starts with the number 1 and go down by increments followed by ". "
+    elif all(re.match(r"^\d+\. ", line) for line in block.split("\n")):
+        return BlockType.ORDERED_LIST
+   
+
+    else:
+        return BlockType.PARAGRAPH
+
+
+
+
+
+
+
+
+
+   
+    elif block.startswith(">"):
+        return BlockType.QUOTE
+    elif block.startswith("- "):
+        return BlockType.UNORDERED_LIST
+    elif block.startswith("1. "):
+        return BlockType.ORDERED_LIST
+    else:
+        return BlockType.PARAGRAPH\

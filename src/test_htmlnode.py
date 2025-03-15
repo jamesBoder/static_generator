@@ -5,7 +5,7 @@ from htmlnode import LeafNode
 from htmlnode import ParentNode
 from textnode import TextType, TextNode
 from htmlnode import text_node_to_html_node
-from code_func import split_nodes_delimiter, extract_markdown_images, split_nodes_image, split_nodes_link, text_to_textnodes
+from code_func import split_nodes_delimiter, extract_markdown_images, split_nodes_image, split_nodes_link, text_to_textnodes, markdown_to_blocks
 
 
 class TestHtmlNode(unittest.TestCase):
@@ -187,7 +187,12 @@ class TestHtmlNode(unittest.TestCase):
         text_nodes = text_to_textnodes(text)
         self.assertEqual(text_nodes, [TextNode("This is a text node", TextType.TEXT)])
 
-    
+    def test_markdown_to_blocks(self):
+        markdown = "This is a text node"
+        blocks = markdown_to_blocks(markdown)
+        self.assertEqual(blocks, [TextNode("This is a text node", TextType.TEXT)])
+
+ 
         
 
             

@@ -1,5 +1,6 @@
 import re
 from textnode import TextNode, TextType, BlockType
+from htmlnode import LeafNode, ParentNode, text_node_to_html_node, HTMLNode
 
 def split_nodes_delimiter(old_nodes, delimiter, text_type):
     new_nodes = []
@@ -90,11 +91,70 @@ def split_nodes_link(old_nodes):
     return new_nodes
 
 def text_to_textnodes(text):
-    # COnvert markdown text into list of TextNodes
-    nodes = [TextNode(text, TextType.TEXT)]
-    nodes = split_nodes_image(nodes)
-    nodes = split_nodes_link(nodes)
-    return nodes
+    nodes = []
+    remaining_text = text
+    
+    while remaining_text:
+        # Find the position of each marker, -1 if not found
+        bold_double_asterisk = remaining_text.find("**")
+        bold_double_underscore = remaining_text.find("__")
+        italic_asterisk = remaining_text.find("*")
+        italic_underscore = remaining_text.find("_")
+        
+        # Set invalid positions to a large number
+        if bold_double_asterisk == -1: bold_double_asterisk = float('inf')
+        if bold_double_underscore == -1: bold_double_underscore = float('inf')
+        if italic_asterisk == -1: italic_asterisk = float('inf')
+        if italic_underscore == -1: italic_underscore = float('inf')
+        
+        # Find the earliest marker
+        earliest_marker = min(bold_double_asterisk, bold_double_underscore, 
+                              italic_asterisk, italic_underscore)
+        
+        # If no markers found, add remaining text and break
+        if earliest_marker == float('inf'):
+            nodes.append(TextNode(remaining_text, TextType.TEXT))
+            break
+            
+        # Add any text before the marker
+        if earliest_marker > 0:
+            nodes.append(TextNode(remaining_text[:earliest_marker], TextType.TEXT))
+            
+        # Handle the appropriate marker type
+        if earliest_marker == bold_double_asterisk:
+            end = remaining_text.find("**", bold_double_asterisk + 2)
+            if end != -1:
+                nodes.append(TextNode(remaining_text[bold_double_asterisk + 2:end], TextType.BOLD))
+                remaining_text = remaining_text[end + 2:]  # Update remaining_text to skip past this marker
+            else:
+                 # If no closing marker, treat the opening marker as plain text and advance past it
+                nodes.append(TextNode(remaining_text[:bold_double_asterisk + 2], TextType.TEXT))
+                remaining_text = remaining_text[bold_double_asterisk + 2:]
+        elif earliest_marker == bold_double_underscore:
+            end = remaining_text.find("__", bold_double_underscore + 2)
+            if end != -1:
+                nodes.append(TextNode(remaining_text[bold_double_underscore + 2:end], TextType.BOLD))
+                remaining_text = remaining_text[end + 2:]
+            else:
+                nodes.append(TextNode(remaining_text[:bold_double_underscore + 2], TextType.TEXT))
+                remaining_text = remaining_text[bold_double_underscore + 2:]
+        elif earliest_marker == italic_asterisk:
+            end = remaining_text.find("*", italic_asterisk + 1)
+            if end != -1:
+                nodes.append(TextNode(remaining_text[italic_asterisk + 1:end], TextType.ITALIC))
+                remaining_text = remaining_text[end + 1:]
+            else:
+                nodes.append(TextNode(remaining_text[:italic_asterisk + 1], TextType.TEXT))
+                remaining_text = remaining_text[italic_asterisk + 1:]
+        elif earliest_marker == italic_underscore:
+            end = remaining_text.find("_", italic_underscore + 1)
+            if end != -1:
+                nodes.append(TextNode(remaining_text[italic_underscore + 1:end], TextType.ITALIC))
+                remaining_text = remaining_text[end + 1:]
+            else:
+                nodes.append(TextNode(remaining_text[:italic_underscore + 1], TextType.TEXT))
+                remaining_text = remaining_text[italic_underscore + 1:]         
+    return nodes   
 
 def markdown_to_blocks(markdown):
     # Split markdown into blocks
@@ -127,9 +187,87 @@ def block_to_block_type(block):
     elif all(re.match(r"^\d+\. ", line) for line in block.split("\n")):
         return BlockType.ORDERED_LIST
    
-
     else:
         return BlockType.PARAGRAPH
+
+def markdown_to_html_node(markdown):
+    # Convert markdown to single parent HTMLNode
+    blocks = markdown_to_blocks(markdown)
+    # Determine the type of block
+    block_types = [block_to_block_type(block) for block in blocks]
+    # Create an appropriate HTML node based on its type using text_node_to_html_node
+    html_nodes = []
+
+    # Process each block individually with its type at the same time
+    for block, block_type in zip(blocks[:], block_types):
+        if block_type == BlockType.PARAGRAPH:
+            html_nodes.append(ParentNode("p", text_to_textnodes(block)))
+
+        elif block_type == BlockType.HEADING:
+            count = 0
+            while count < len(block) and block[count] == "#":
+                count += 1
+            # Ensure that a missing space doesn't break our function
+            html_nodes.append(ParentNode(f"h{count}", text_to_textnodes(block[count+1:].strip())))
+
+        elif block_type == BlockType.IMAGE:
+            alt_start = block.index("[") + 1
+            alt_end = block.index("]")
+            url_start = block.index("(") + 1
+            url_end = block.index(")")
+
+            alt_text = block[alt_start:alt_end].strip()
+            url = block[url_start:url_end].strip()
+
+            html_nodes.append(ParentNode("img", [], {"src": url, "alt": alt_text}))
+            
+        
+        elif block_type == BlockType.CODE:
+            # treat block as raw text and wrap it with <code> and <pre> tags
+            html_nodes.append(ParentNode("pre", [ParentNode("code", [TextNode(block[3:-3].strip(), TextType.CODE)])]))
+
+
+        elif block_type == BlockType.QUOTE:
+            html_nodes.append(ParentNode("blockquote", text_to_textnodes(block)))
+
+        elif block_type == BlockType.UNORDERED_LIST:
+            items = block.split("\n")
+            items = [item.lstrip() for item in items]
+            items = [ParentNode("li", text_to_textnodes(item)) for item in items]
+            html_nodes.append(ParentNode("ul", items))
+
+        elif block_type == BlockType.ORDERED_LIST:
+            items = block.split("\n") # Split the block into lines
+            list_items = []
+            for item in items:
+                parts = item.split(".", 1) #Split at the first dot
+                if len(parts) > 1: # Ensure there is a nubmer and content
+                    content = parts[1].strip() #Extract the part after the dot
+                    list_items.append(ParentNode("li", text_to_textnodes(content)))
+            html_nodes.append(ParentNode("ol", list_items))
+          
+    # wrap all nodes into a single parent <div> node
+    return ParentNode("div", html_nodes)
+
+def extract_title(markdown):
+    # Split the markdown into lines
+    lines = markdown.split("\n")
+    
+    # Look for a line that starts with a single #
+    for line in lines:
+        if line.startswith("# "):
+            # Return the title with the # and any whitespace removed
+            return line[2:].strip()
+    
+    # If we get here, no title was found
+    raise ValueError("No title found in markdown")
+
+    
+    
+
+    
+   
+
 
 
 
@@ -140,11 +278,3 @@ def block_to_block_type(block):
 
 
    
-    elif block.startswith(">"):
-        return BlockType.QUOTE
-    elif block.startswith("- "):
-        return BlockType.UNORDERED_LIST
-    elif block.startswith("1. "):
-        return BlockType.ORDERED_LIST
-    else:
-        return BlockType.PARAGRAPH\

@@ -1,11 +1,12 @@
 import unittest
+import re
 
 from htmlnode import HTMLNode
 from htmlnode import LeafNode
 from htmlnode import ParentNode
 from textnode import TextType, TextNode
 from htmlnode import text_node_to_html_node
-from code_func import split_nodes_delimiter, extract_markdown_images, split_nodes_image, split_nodes_link, text_to_textnodes, markdown_to_blocks
+from code_func import split_nodes_delimiter, extract_markdown_images, split_nodes_image, split_nodes_link, text_to_textnodes, markdown_to_blocks, extract_title
 
 
 class TestHtmlNode(unittest.TestCase):
@@ -187,19 +188,23 @@ class TestHtmlNode(unittest.TestCase):
         text_nodes = text_to_textnodes(text)
         self.assertEqual(text_nodes, [TextNode("This is a text node", TextType.TEXT)])
 
-    def test_markdown_to_blocks(self):
-        markdown = "This is a text node"
-        blocks = markdown_to_blocks(markdown)
-        self.assertEqual(blocks, [TextNode("This is a text node", TextType.TEXT)])
 
- 
-        
 
-            
+class TestExtractTitle(unittest.TestCase):
+    def test_extract_title_normal_case(self):
+        markdown = "# This is a title\nSome content"
+        title = extract_title(markdown)
+        self.assertEqual(title, "This is a title")
     
-
-
-
+    def test_extract_title_with_leading_trailing_spaces(self):
+        markdown = "#     Title with spaces     \nContent"
+        title = extract_title(markdown)
+        self.assertEqual(title, "Title with spaces")
+    
+    def test_extract_title_missing(self):
+        markdown = "No title here\nJust content"
+        with self.assertRaises(ValueError):
+            extract_title(markdown)
 
 if __name__ == "__main__":
     unittest.main()

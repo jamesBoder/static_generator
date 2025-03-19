@@ -1,12 +1,15 @@
 import unittest
 import re
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 from htmlnode import HTMLNode
 from htmlnode import LeafNode
 from htmlnode import ParentNode
 from textnode import TextType, TextNode
 from htmlnode import text_node_to_html_node
-from code_func import split_nodes_delimiter, extract_markdown_images, split_nodes_image, split_nodes_link, text_to_textnodes, markdown_to_blocks, extract_title
+from code_func import split_nodes_delimiter, extract_markdown_images, split_nodes_image, split_nodes_link, text_to_textnodes, markdown_to_blocks, extract_title, markdown_to_html_node
 
 
 class TestHtmlNode(unittest.TestCase):
@@ -39,7 +42,7 @@ class TestHtmlNode(unittest.TestCase):
         self.assertEqual(node.to_html(), "Hello, world!")
 
     def test_leaf_to_html_no_value(self):
-        node = LeafNode("p", None)
+        node = LeafNode(None, None)
         with self.assertRaises(ValueError):
             node.to_html()
 
@@ -187,6 +190,35 @@ class TestHtmlNode(unittest.TestCase):
         text = "This is a text node"
         text_nodes = text_to_textnodes(text)
         self.assertEqual(text_nodes, [TextNode("This is a text node", TextType.TEXT)])
+
+    def test_markdown_to_html_node_link(self):
+        div_node = markdown_to_html_node("[Click here](https://www.boot.dev)")
+        nodes = div_node.children
+        
+        self.assertEqual(len(nodes), 1)
+        
+        self.assertEqual(nodes[0].tag, "a")
+        self.assertEqual(nodes[0].children[0].text, "Click here")
+        self.assertEqual(nodes[0].props, {"href": "https://www.boot.dev"})
+
+    def test_markdown_to_html_node_quote(self):
+        div_node = markdown_to_html_node("> This is a blockquote")
+        nodes = div_node.children
+        
+        self.assertEqual(len(nodes), 1)
+        
+        self.assertEqual(nodes[0].tag, "blockquote")
+        self.assertEqual(nodes[0].children[0].text, "This is a blockquote")
+    
+    def test_markdown_to_html_node_code(self):
+        div_node = markdown_to_html_node("```\nprint('Hello, world!')\n```")
+        nodes = div_node.children
+        
+        self.assertEqual(len(nodes), 1)
+        self.assertEqual(nodes[0].tag, "pre")
+        self.assertEqual(nodes[0].children[0].tag, "code")
+        self.assertEqual(nodes[0].children[0].children[0].text, "print('Hello, world!')")
+        
 
 
 

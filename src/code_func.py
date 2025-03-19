@@ -100,16 +100,20 @@ def text_to_textnodes(text):
         bold_double_underscore = remaining_text.find("__")
         italic_asterisk = remaining_text.find("*")
         italic_underscore = remaining_text.find("_")
+        link_start = remaining_text.find("[")
+        code_backtick = remaining_text.find("`")
         
         # Set invalid positions to a large number
         if bold_double_asterisk == -1: bold_double_asterisk = float('inf')
         if bold_double_underscore == -1: bold_double_underscore = float('inf')
         if italic_asterisk == -1: italic_asterisk = float('inf')
         if italic_underscore == -1: italic_underscore = float('inf')
+        if link_start == -1: link_start = float('inf')
+        if code_backtick == -1: code_backtick = float('inf')
         
         # Find the earliest marker
         earliest_marker = min(bold_double_asterisk, bold_double_underscore, 
-                              italic_asterisk, italic_underscore)
+                              italic_asterisk, italic_underscore, link_start, code_backtick)
         
         # If no markers found, add remaining text and break
         if earliest_marker == float('inf'):
@@ -153,7 +157,37 @@ def text_to_textnodes(text):
                 remaining_text = remaining_text[end + 1:]
             else:
                 nodes.append(TextNode(remaining_text[:italic_underscore + 1], TextType.TEXT))
-                remaining_text = remaining_text[italic_underscore + 1:]         
+                remaining_text = remaining_text[italic_underscore + 1:] 
+
+        elif earliest_marker == link_start:
+            # Look for closing bracket and opening parenthesis
+            closing_bracket = remaining_text.find("]", link_start)
+            if closing_bracket != -1 and remaining_text[closing_bracket + 1:closing_bracket + 2] == "(":
+                # Find closing parenthesis
+                closing_paren = remaining_text.find(")", closing_bracket)
+                if closing_paren != -1:
+                    # Extract link text and URL
+                    link_text = remaining_text[link_start + 1:closing_bracket]
+                    link_url = remaining_text[closing_bracket + 2:closing_paren]
+                    # Create link node (you'll need to define TextType.LINK)
+                    nodes.append(TextNode(link_text, TextType.LINK, link_url))
+                    remaining_text = remaining_text[closing_paren + 1:]
+                else:
+                    # No closing parenthesis, treat as plain text
+                    nodes.append(TextNode(remaining_text[:link_start + 1], TextType.TEXT))
+                    remaining_text = remaining_text[link_start + 1:]
+            else:
+                # No proper link format, treat as plain text
+                nodes.append(TextNode(remaining_text[:link_start + 1], TextType.TEXT))
+                remaining_text = remaining_text[link_start + 1:]  
+        elif earliest_marker == code_backtick:
+                end = remaining_text.find("`", code_backtick + 1)
+                if end != -1:
+                    nodes.append(TextNode(remaining_text[code_backtick + 1:end], TextType.CODE))
+                    remaining_text = remaining_text[end + 1:]
+                else:
+                    nodes.append(TextNode(remaining_text[:code_backtick + 1], TextType.TEXT))
+                    remaining_text = remaining_text[code_backtick + 1:]      
     return nodes   
 
 def markdown_to_blocks(markdown):
@@ -173,12 +207,17 @@ def block_to_block_type(block):
         count += 1
     if count > 6 or (count > 0 and (len(block) <= count or block[count] != " ")):
         return BlockType.PARAGRAPH
-    if 1 <= count <= 6 and len(block) > count and block[count] == " ":
-        return BlockType.HEADING
-    elif block[:3] == "```" and block[-3:] == "```":
-        return BlockType.CODE
+    elif block.startswith("#"):
+        count = 0
+        while count < len(block) and block[count] == "#":
+            count += 1
+        if 1 <= count <= 6 and len(block) > count and block[count] == " ":
+            return BlockType.HEADING
+    elif block.startswith("```") and block.endswith("```"):
+        if len(block.strip()) > 6: 
+            return BlockType.CODE
     # Check every line in a quote block starts with ">"
-    elif all(line.startswith(">") for line in block.split("\n")):
+    elif all(line.lstrip().startswith(">") for line in block.split("\n")):
         return BlockType.QUOTE
     # Check every line in an unordered list block starts with "- "
     elif all(re.match(r"^- ", line) for line in block.split("\n")):
@@ -186,7 +225,10 @@ def block_to_block_type(block):
     # Check every line in an ordered list block starts with the number 1 and go down by increments followed by ". "
     elif all(re.match(r"^\d+\. ", line) for line in block.split("\n")):
         return BlockType.ORDERED_LIST
-   
+    elif block.startswith("!["):
+        return BlockType.IMAGE
+    elif block.startswith("[") and block.endswith(")"):
+        return BlockType.LINK
     else:
         return BlockType.PARAGRAPH
 
@@ -219,32 +261,72 @@ def markdown_to_html_node(markdown):
             alt_text = block[alt_start:alt_end].strip()
             url = block[url_start:url_end].strip()
 
-            html_nodes.append(ParentNode("img", [], {"src": url, "alt": alt_text}))
+            html_nodes.append(LeafNode("img", [], {"src": url, "alt": alt_text}))
             
         
         elif block_type == BlockType.CODE:
-            # treat block as raw text and wrap it with <code> and <pre> tags
-            html_nodes.append(ParentNode("pre", [ParentNode("code", [TextNode(block[3:-3].strip(), TextType.CODE)])]))
+            content = block[3:-3].strip()  # Extract the content of the code block
+
+            # Create a <code> tag as a ParentNode with the TextNode content
+            code_node = ParentNode("code", [TextNode(content, TextType.CODE)])
+            
+            # Wrap the <code> tag in a <pre> tag
+            pre_node = ParentNode("pre", [code_node])
+
+            # Append the resulting <pre> element to the list of nodes
+            html_nodes.append(pre_node)
+
+        elif block_type == BlockType.LINK:
+            text_start = block.find("[") + 1
+            text_end = block.find("]")
+            url_start = block.find("(") + 1
+            url_end = block.find(")")
+
+            # Ensure all positions are valid
+            if text_start > 0 and text_end > 0 and url_start > 0 and url_end > 0:
+                link_text = block[text_start:text_end].strip()
+                href = block[url_start:url_end].strip()
+                link_node = ParentNode("a", [TextNode(link_text, TextType.TEXT)], {"href": href})
+                html_nodes.append(link_node)
+            else:
+                # Handle malformed link syntax (optional: raise an error or skip)
+                print("Malformed link: treating as paragraph", block)
+                html_nodes.append(ParentNode("p", [TextNode(block, TextType.TEXT)]))
+
 
 
         elif block_type == BlockType.QUOTE:
-            html_nodes.append(ParentNode("blockquote", text_to_textnodes(block)))
+            lines = block.split("\n")
+            clean_lines = []
+            for line in lines:
+                stripped_line = line.lstrip(">").strip()
+                clean_lines.append(stripped_line)
+
+            cleaned_text = "\n".join(clean_lines)
+            html_nodes.append(ParentNode("blockquote", text_to_textnodes(cleaned_text)))
 
         elif block_type == BlockType.UNORDERED_LIST:
             items = block.split("\n")
-            items = [item.lstrip() for item in items]
+            items = [item.lstrip("- \t") for item in items]
             items = [ParentNode("li", text_to_textnodes(item)) for item in items]
-            html_nodes.append(ParentNode("ul", items))
+
+            if items:
+                html_nodes.append(ParentNode("ul", items))
+            else:
+                print("Warning: Empty unordered list detected, skipping")
 
         elif block_type == BlockType.ORDERED_LIST:
             items = block.split("\n") # Split the block into lines
             list_items = []
             for item in items:
                 parts = item.split(".", 1) #Split at the first dot
-                if len(parts) > 1: # Ensure there is a nubmer and content
+                if len(parts) > 1 and parts[1].strip(): # Ensure there is a nubmer and content
                     content = parts[1].strip() #Extract the part after the dot
                     list_items.append(ParentNode("li", text_to_textnodes(content)))
-            html_nodes.append(ParentNode("ol", list_items))
+            if list_items:
+                html_nodes.append(ParentNode("ol", list_items))
+            else:
+                print("Warning: Empty ordered list detected, skipping")
           
     # wrap all nodes into a single parent <div> node
     return ParentNode("div", html_nodes)
@@ -261,6 +343,8 @@ def extract_title(markdown):
     
     # If we get here, no title was found
     raise ValueError("No title found in markdown")
+
+
 
     
     

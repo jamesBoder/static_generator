@@ -8,7 +8,26 @@ class HTMLNode ():
         self.props = props
     
     def to_html(self):
-        raise NotImplementedError("This method should be implemented by the subclass")
+        if self.tag is None:
+            return self.value
+        
+        attrs_html = ""
+        for attr, value in self.props.items():
+            attrs_html += f' {attr}="{value}"'
+        
+        if self.tag in self.SELF_CLOSING_TAGS:
+            return f"<{self.tag}{attrs_html}/>"
+        
+        # Check if this is a parent node with no children
+        if not self.children:
+            # For parent nodes with no children, return an empty element
+            return f"<{self.tag}{attrs_html}></{self.tag}>"
+        
+        children_html = ""
+        for child in self.children:
+            children_html += child.to_html()
+        
+        return f"<{self.tag}{attrs_html}>{children_html}</{self.tag}>"
     
     def props_to_html(self):
         if not self.props:
@@ -27,14 +46,19 @@ class LeafNode(HTMLNode):
         super().__init__(tag, value, None, props)
     
     def to_html(self):
-        if self.value == None:
-            raise ValueError("All leaf nodes must have a value")
+        if self.value == None and self.tag == None:
+            raise ValueError("All leaf nodes must have either a tag or a value")
         elif self.tag == None:
             return self.value
+        elif self.value == None:
+            # Self-closing tag
+            return f"<{self.tag}{self.props_to_html()} />"
         return f"<{self.tag}{self.props_to_html()}>{self.value}</{self.tag}>"
 
 class ParentNode(HTMLNode):
     def __init__(self, tag=None, children=None, props=None):
+        if children is None:
+            children = []
         super().__init__(tag, None, children, props=props)
 
     def to_html(self):
@@ -44,6 +68,8 @@ class ParentNode(HTMLNode):
             raise ValueError("All parent nodes must have children")
         children_html = ""
         for child in self.children:
+            if not hasattr(child, 'to_html') or not callable(child.to_html):
+                raise TypeError(f"Child node must be an HTMLNode or compatible type. Found: {type(child)}")
             children_html += child.to_html()
         return f"<{self.tag}{self.props_to_html()}>{children_html}</{self.tag}>"
     
@@ -62,5 +88,4 @@ def text_node_to_html_node(text_node):
         return LeafNode(tag="img", value=None, props={"src": text_node.url})
     else:
         raise ValueError("Invalid text node type")
-    
-    
+

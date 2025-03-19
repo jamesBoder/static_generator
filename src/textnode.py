@@ -15,6 +15,8 @@ class BlockType(Enum):
     QUOTE = "quote"
     UNORDERED_LIST = "unordered_list"
     ORDERED_LIST = "ordered_list"
+    IMAGE = "image"
+    LINK = "link"
 
 class TextNode:
     def __init__(self, text, text_type, url=None):

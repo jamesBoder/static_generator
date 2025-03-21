@@ -1,15 +1,24 @@
 import os
 import shutil
+import sys
 from textnode import TextNode, TextType
 from code_func import extract_title, markdown_to_html_node
 
 static = './static'
-public = './public'
+public = '.public'
 content = './content/index.md'
 template = './template.html'
 public_index = './public/index.html'
 content_dir = './content'  # Directory path
+output_dir = './docs'
 
+# Check if there's a CLI argument provided
+if len(sys.argv) > 1:
+    basepath = sys.argv[1]
+else:
+    basepath = '/'
+
+print(f"The basepath is: {basepath}")
 
 
 def copy_files(src_dir, dest_dir):
@@ -42,7 +51,7 @@ def copy_files(src_dir, dest_dir):
         print(f"An error occurred: {e}")
 
 
-def generate_page(src_path, template_path, dest_path):
+def generate_page(src_path, template_path, dest_path, basepath):
     print(f"Generating page from {src_path} to {dest_path} using {template_path}")
     
     # Read markdown file at src_path
@@ -76,6 +85,10 @@ def generate_page(src_path, template_path, dest_path):
     # Replace placeholders in template
     final_html = template_content.replace('{{ Title }}', title).replace('{{ Content }}', html_content)
 
+    # Replace basepath in links and sources
+    final_html = final_html.replace('href="/', f'href="{basepath}')
+    final_html = final_html.replace('src="/', f'src="{basepath}')   
+
     # Create destination directory if needed
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
@@ -83,7 +96,7 @@ def generate_page(src_path, template_path, dest_path):
     with open(dest_path, 'w') as f:
         f.write(final_html)
 
-def generate_pages_recursive(dir_path_content, template_path, dest_dir_path):
+def generate_pages_recursive(dir_path_content, template_path, dest_dir_path, basepath):
     # Ensure the content directory exists
     if not os.path.exists(dir_path_content):
         print(f"Content directory '{dir_path_content}' does not exist.")
@@ -109,29 +122,30 @@ def generate_pages_recursive(dir_path_content, template_path, dest_dir_path):
 
             
             # Generate the HTML page
-            generate_page(src_path, template_path, dest_path)
+            generate_page(src_path, template_path, dest_path, basepath)
         
         elif os.path.isdir(src_path):
             # For a directory, recursively process it
             sub_dest_dir = os.path.join(dest_dir_path, item)
-            generate_pages_recursive(src_path, template_path, sub_dest_dir)
-    
+            generate_pages_recursive(src_path, template_path, sub_dest_dir, basepath)
+
+
 
 def main():
     
     # Delete all files in public directory
-    if os.path.exists(public):
+    if os.path.exists(output_dir):
         # Remove the entire directory and recreate it
-        shutil.rmtree(public)
-        os.makedirs(public)
-        print(f"Recreated {public} directory")
+        shutil.rmtree(output_dir)
+        os.makedirs(output_dir)
+        print(f"Recreated {output_dir} directory")
     else:
-        os.makedirs(public)
-        print(f"Created {public} directory")
+        os.makedirs(output_dir)
+        print(f"Created {output_dir} directory")
 
 
-    copy_files(static, public)
-    generate_pages_recursive(content_dir, template, public)
+    copy_files(static, output_dir)
+    generate_pages_recursive(content_dir, template, output_dir, basepath)
     # text_node = TextNode("this is some anchor text", TextType.LINK, "https://www.boot.dev")
     # print(text_node)
     

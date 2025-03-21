@@ -1,6 +1,7 @@
 import os
 import shutil
 import sys
+import re
 from textnode import TextNode, TextType
 from code_func import extract_title, markdown_to_html_node
 
@@ -82,12 +83,27 @@ def generate_page(src_path, template_path, dest_path, basepath):
             print(f"Error processing {src_path}: {e}")
             html_content = "<div>Error processing content</div>"
 
+    
+
     # Replace placeholders in template
     final_html = template_content.replace('{{ Title }}', title).replace('{{ Content }}', html_content)
 
+    
+
     # Replace basepath in links and sources
-    final_html = final_html.replace('href="/', f'href="{basepath}')
-    final_html = final_html.replace('src="/', f'src="{basepath}')   
+    if basepath != '/':
+        final_html = re.sub('href="/', f'href="{basepath}', final_html)
+        final_html = re.sub('src="/', f'src="{basepath}', final_html)  
+
+        # Check and log a subset of the final HTML
+    if 'href="' in final_html or 'src="' in final_html:
+        print("Debug: Links found with basepath replacements:")
+        replaced_links = re.findall(f'href="{basepath}[^"]*"', final_html)
+        replaced_srcs = re.findall(f'src="{basepath}[^"]*"', final_html)
+        print("Replaced hrefs:", replaced_links)
+        print("Replaced srcs:", replaced_srcs)
+    else:
+        print("Debug: No links or sources found to replace.") 
 
     # Create destination directory if needed
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
